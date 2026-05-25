@@ -54,6 +54,8 @@ func NewHandler(db map[string]User) http.Handler {
 	r.Post("/users", HandleCreateUser(db))
 	r.Get("/users/{id}", HandleGetUser(db))
 	r.Get("/users", HandleGetAllUsers(db))
+	r.Delete("/users/{id}", HandleDeleteUser(db))
+	
 	return r 
 }
 
@@ -110,6 +112,26 @@ func HandleGetAllUsers(db map[string]User) http.HandlerFunc {
 		}
 
 		sendJSON(w, Response{Data: users}, http.StatusOK)
+	}
+}
+
+func HandleDeleteUser(db map[string]User) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+
+		if id == "" {
+			sendJSON(w, Response{Error: "id is required"}, http.StatusBadRequest)
+			return
+		}
+
+		if _, ok := db[id]; !ok {
+			sendJSON(w, Response{Error: "user not found"}, http.StatusNotFound)
+			return
+		}
+
+		delete(db, id)
+		sendJSON(w, Response{Data: fmt.Sprintf("user with id %s deleted", id)}, http.StatusOK)
+
 	}
 }
 
