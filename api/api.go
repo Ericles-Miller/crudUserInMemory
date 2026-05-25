@@ -24,7 +24,7 @@ type UserBody struct {
 }
 
 type Response struct {
-	Data User `json:"data,omitempty"`
+	Data any `json:"data,omitempty"`
 	Error string `json:"error,omitempty"`
 }
 
@@ -53,7 +53,7 @@ func NewHandler(db map[string]User) http.Handler {
 	// declare endpoint here 
 	r.Post("/users", HandleCreateUser(db))
 	r.Get("/users/{id}", HandleGetUser(db))
-
+	r.Get("/users", HandleGetAllUsers(db))
 	return r 
 }
 
@@ -96,8 +96,20 @@ func HandleGetUser(db map[string]User) http.HandlerFunc {
 			sendJSON(w, Response{Error: "user not found"}, http.StatusNotFound)
 			return
 		}
-		
+
 		sendJSON(w, Response{Data: user}, http.StatusOK)
+	}
+}
+
+func HandleGetAllUsers(db map[string]User) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var users []User
+
+		for _, user := range db {
+			users = append(users, user)
+		}
+
+		sendJSON(w, Response{Data: users}, http.StatusOK)
 	}
 }
 
