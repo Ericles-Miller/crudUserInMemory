@@ -24,8 +24,8 @@ type UserBody struct {
 }
 
 type Response struct {
-	Data User `json:"data, omitempty"`
-	Error string `json:"error, omitempty"`
+	Data User `json:"data,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 func sendJSON(w http.ResponseWriter, resp Response, status int) {
@@ -52,6 +52,7 @@ func NewHandler(db map[string]User) http.Handler {
 
 	// declare endpoint here 
 	r.Post("/users", HandleCreateUser(db))
+	r.Get("/users/{id}", HandleGetUser(db))
 
 	return r 
 }
@@ -78,6 +79,25 @@ func HandleCreateUser(db map[string]User) http.HandlerFunc {
 		}
 		db[user.Id.String()] = user
 		sendJSON(w, Response{Data: user}, http.StatusCreated)
+	}
+}
+
+func HandleGetUser(db map[string]User) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+
+		if id == "" {
+			sendJSON(w, Response{Error: "id is required"}, http.StatusBadRequest)
+			return
+		}
+
+		user, ok := db[id]
+		if !ok {
+			sendJSON(w, Response{Error: "user not found"}, http.StatusNotFound)
+			return
+		}
+		
+		sendJSON(w, Response{Data: user}, http.StatusOK)
 	}
 }
 
