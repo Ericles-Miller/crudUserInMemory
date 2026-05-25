@@ -5,26 +5,27 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"github.com/google/uuid"
+
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type User struct {
-	FirstName string `json:"firstName"`
-	LastName string `json:"lastName"`
-	Biography string `json:"biography"`
-	Id uuid.UUID `json:"id"`
+	FirstName string    `json:"firstName"`
+	LastName  string    `json:"lastName"`
+	Biography string    `json:"biography"`
+	Id        uuid.UUID `json:"id"`
 }
 
 type UserBody struct {
 	FirstName string `json:"firstName"`
-	LastName string `json:"lastName"`
+	LastName  string `json:"lastName"`
 	Biography string `json:"biography"`
 }
 
 type Response struct {
-	Data any `json:"data,omitempty"`
+	Data  any    `json:"data,omitempty"`
 	Error string `json:"error,omitempty"`
 }
 
@@ -50,13 +51,14 @@ func NewHandler(db map[string]User) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 
-	// declare endpoint here 
+	// declare endpoint here
 	r.Post("/users", HandleCreateUser(db))
 	r.Get("/users/{id}", HandleGetUser(db))
 	r.Get("/users", HandleGetAllUsers(db))
 	r.Delete("/users/{id}", HandleDeleteUser(db))
-	
-	return r 
+	r.Put("/users/{id}", HandleUpdateUser(db))
+
+	return r
 }
 
 func HandleCreateUser(db map[string]User) http.HandlerFunc {
@@ -73,11 +75,11 @@ func HandleCreateUser(db map[string]User) http.HandlerFunc {
 			return
 		}
 
-		user := User {
+		user := User{
 			FirstName: userBody.FirstName,
-			LastName: userBody.LastName,
+			LastName:  userBody.LastName,
 			Biography: userBody.Biography,
-			Id: uuid.New(),
+			Id:        uuid.New(),
 		}
 		db[user.Id.String()] = user
 		sendJSON(w, Response{Data: user}, http.StatusCreated)
@@ -135,12 +137,49 @@ func HandleDeleteUser(db map[string]User) http.HandlerFunc {
 	}
 }
 
-func ValidateUser(user UserBody)  error {
+func HandleUpdateUser(db map[string]User) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+
+		if id == "" {
+			sendJSON(w, Response{Error: "id is required"}, http.StatusBadRequest)
+			return
+		}
+
+		if _, ok := db[id]; !ok {
+			sendJSON(w, Response{Error: "user not found"}, http.StatusNotFound)
+			return
+		}
+
+		var userBody UserBody
+
+		if error := json.NewDecoder(r.Body).Decode(&userBody); error != nil {
+			sendJSON(w, Response{Error: "Invalid request body"}, http.StatusBadRequest)
+			return
+		}
+
+		if error := ValidateUser(userBody); error != nil {
+			sendJSON(w, Response{Error: error.Error()}, http.StatusBadRequest)
+			return
+		}
+
+		user := User{
+			FirstName: userBody.FirstName,
+			LastName:  userBody.LastName,
+			Biography: userBody.Biography,
+			Id:        uuid.MustParse(id),
+		}
+		db[id] = user
+		sendJSON(w, Response{Data: user}, http.StatusOK)
+	}
+}
+
+func ValidateUser(user UserBody) error {
 	if user.FirstName == "" || user.LastName == "" {
 		return fmt.Errorf("First Name and LastName is required")
 	}
 
-	if(len(user.FirstName) <=2 || len(user.LastName) <= 2) {
+	if len(user.FirstName) <= 2 || len(user.LastName) <= 2 {
 		return fmt.Errorf("First Name and LastName must be at least 3 characters long")
 	}
 
