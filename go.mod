@@ -1,4 +1,4 @@
-module github.com/Ericles-Miller/SearchInfoIMDBsMovies
+module github.com/Ericles-Miller/crudUserInMemory
 
 go 1.26.3
 
