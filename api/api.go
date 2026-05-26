@@ -2,27 +2,14 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 
+	"github.com/Ericles-Miller/crudUserInMemory/application"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
-
-type User struct {
-	FirstName string    `json:"firstName"`
-	LastName  string    `json:"lastName"`
-	Biography string    `json:"biography"`
-	Id        uuid.UUID `json:"id"`
-}
-
-type UserBody struct {
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
-	Biography string `json:"biography"`
-}
 
 type Response struct {
 	Data  any    `json:"data,omitempty"`
@@ -32,19 +19,22 @@ type Response struct {
 func sendJSON(w http.ResponseWriter, resp Response, status int) {
 	data, err := json.Marshal(resp)
 	if err != nil {
-		slog.Error("error ao fazer marshal de json", "error", err)
+		slog.Error("error to make marshal de json", "error", err)
 		sendJSON(w, Response{Error: "something went wrong"}, http.StatusInternalServerError)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
+
 	if _, err := w.Write(data); err != nil {
-		slog.Error("error ao enviar a resposta", "error", err)
+		slog.Error("error to send the response", "error", err)
 		return
 	}
 }
 
-func NewHandler(db map[string]User) http.Handler {
+func NewHandler() http.Handler {
+	app := application.New()
 	r := chi.NewMux()
 
 	r.Use(middleware.Recoverer)
@@ -52,41 +42,34 @@ func NewHandler(db map[string]User) http.Handler {
 	r.Use(middleware.Logger)
 
 	// declare endpoint here
-	r.Post("/users", HandleCreateUser(db))
-	r.Get("/users/{id}", HandleGetUser(db))
-	r.Get("/users", HandleGetAllUsers(db))
-	r.Delete("/users/{id}", HandleDeleteUser(db))
-	r.Put("/users/{id}", HandleUpdateUser(db))
+	r.Post("/api/users", HandleCreateUser(app))
+	r.Get("/api/users/{id}", HandleGetUser(app))
+	r.Get("/api/users", HandleGetAllUsers(app))
+	r.Delete("/api/users/{id}", HandleDeleteUser(app))
+	r.Put("/api/users/{id}", HandleUpdateUser(app))
 
 	return r
 }
 
-func HandleCreateUser(db map[string]User) http.HandlerFunc {
+func HandleCreateUser(app *application.Application) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var userBody UserBody
+		var userBody application.UserBody
 
 		if error := json.NewDecoder(r.Body).Decode(&userBody); error != nil {
 			sendJSON(w, Response{Error: "Invalid request body"}, http.StatusBadRequest)
 			return
 		}
 
-		if error := ValidateUser(userBody); error != nil {
-			sendJSON(w, Response{Error: error.Error()}, http.StatusBadRequest)
+		createUser, err := app.Insert(userBody)
+		if err != nil {
+			sendJSON(w, Response{Error: err.Error()}, http.StatusBadRequest)
 			return
 		}
-
-		user := User{
-			FirstName: userBody.FirstName,
-			LastName:  userBody.LastName,
-			Biography: userBody.Biography,
-			Id:        uuid.New(),
-		}
-		db[user.Id.String()] = user
-		sendJSON(w, Response{Data: user}, http.StatusCreated)
+		sendJSON(w, Response{Data: createUser}, http.StatusCreated)
 	}
 }
 
-func HandleGetUser(db map[string]User) http.HandlerFunc {
+func HandleGetUser(app *application.Application) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 
@@ -95,7 +78,13 @@ func HandleGetUser(db map[string]User) http.HandlerFunc {
 			return
 		}
 
-		user, ok := db[id]
+		parsedId, err := uuid.Parse(id)
+		if err != nil {
+			sendJSON(w, Response{Error: "invalid id"}, http.StatusBadRequest)
+			return
+		}
+
+		user, ok := app.FindById(parsedId)
 		if !ok {
 			sendJSON(w, Response{Error: "user not found"}, http.StatusNotFound)
 			return
@@ -105,19 +94,16 @@ func HandleGetUser(db map[string]User) http.HandlerFunc {
 	}
 }
 
-func HandleGetAllUsers(db map[string]User) http.HandlerFunc {
+func HandleGetAllUsers(app *application.Application) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var users []User
 
-		for _, user := range db {
-			users = append(users, user)
-		}
+		users := app.FindAll()
 
 		sendJSON(w, Response{Data: users}, http.StatusOK)
 	}
 }
 
-func HandleDeleteUser(db map[string]User) http.HandlerFunc {
+func HandleDeleteUser(app *application.Application) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 
@@ -126,18 +112,25 @@ func HandleDeleteUser(db map[string]User) http.HandlerFunc {
 			return
 		}
 
-		if _, ok := db[id]; !ok {
+		parsedId, err := uuid.Parse(id)
+		if err != nil {
+			sendJSON(w, Response{Error: "invalid id"}, http.StatusBadRequest)
+			return
+		}
+
+		user, ok := app.Delete(parsedId)
+
+		if !ok {
 			sendJSON(w, Response{Error: "user not found"}, http.StatusNotFound)
 			return
 		}
 
-		delete(db, id)
-		sendJSON(w, Response{Data: fmt.Sprintf("user with id %s deleted", id)}, http.StatusOK)
+		sendJSON(w, Response{Data: user}, http.StatusOK)
 
 	}
 }
 
-func HandleUpdateUser(db map[string]User) http.HandlerFunc {
+func HandleUpdateUser(app *application.Application) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 
@@ -146,45 +139,30 @@ func HandleUpdateUser(db map[string]User) http.HandlerFunc {
 			return
 		}
 
-		if _, ok := db[id]; !ok {
-			sendJSON(w, Response{Error: "user not found"}, http.StatusNotFound)
+		parsedId, err := uuid.Parse(id)
+		if err != nil {
+			sendJSON(w, Response{Error: "invalid id"}, http.StatusBadRequest)
 			return
 		}
 
-		var userBody UserBody
+		var userBody application.UserBody
 
 		if error := json.NewDecoder(r.Body).Decode(&userBody); error != nil {
 			sendJSON(w, Response{Error: "Invalid request body"}, http.StatusBadRequest)
 			return
 		}
 
-		if error := ValidateUser(userBody); error != nil {
-			sendJSON(w, Response{Error: error.Error()}, http.StatusBadRequest)
+		user, ok, err := app.Update(parsedId, userBody)
+		if err != nil {
+			sendJSON(w, Response{Error: err.Error()}, http.StatusBadRequest)
 			return
 		}
 
-		user := User{
-			FirstName: userBody.FirstName,
-			LastName:  userBody.LastName,
-			Biography: userBody.Biography,
-			Id:        uuid.MustParse(id),
+		if !ok {
+			sendJSON(w, Response{Error: "user not found"}, http.StatusNotFound)
+			return
 		}
-		db[id] = user
+
 		sendJSON(w, Response{Data: user}, http.StatusOK)
 	}
-}
-
-func ValidateUser(user UserBody) error {
-	if user.FirstName == "" || user.LastName == "" {
-		return fmt.Errorf("First Name and LastName is required")
-	}
-
-	if len(user.FirstName) <= 2 || len(user.LastName) <= 2 {
-		return fmt.Errorf("First Name and LastName must be at least 3 characters long")
-	}
-
-	if user.Biography == "" {
-		return fmt.Errorf("Biography is required")
-	}
-	return nil
 }
