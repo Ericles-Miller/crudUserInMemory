@@ -1,71 +1,75 @@
 package application
 
-import "github.com/google/uuid"
+import (
+	"context"
+	"database/sql"
+	"errors"
+
+	"github.com/Ericles-Miller/crudUserInMemory/internal/database/pgstore"
+	"github.com/google/uuid"
+)
+
+var ErrNotFound = errors.New("user not found")
 
 type Application struct {
-	data map[uuid.UUID]User
+	queries *pgstore.Queries
 }
 
-func New() *Application {
-	return &Application{
-		data: make(map[uuid.UUID]User),
-	}
+func New(queries *pgstore.Queries) *Application {
+	return &Application{queries: queries}
 }
 
-func (a *Application) FindAll() []User {
-	users := make([]User, 0, len(a.data))
-	for _, user := range a.data {
-		users = append(users, user)
-	}
-	return users
+func (a *Application) FindAll(ctx context.Context) ([]pgstore.User, error) {
+	return a.queries.FindAll(ctx)
 }
 
-func (a *Application) FindById(id uuid.UUID) (User, bool) {
-	user, ok := a.data[id]
-	return user, ok
+func (a *Application) FindById(ctx context.Context, id uuid.UUID) (pgstore.User, error) {
+	user, err := a.queries.FindById(ctx, id)
+	
+	if errors.Is(err, sql.ErrNoRows) {
+		return pgstore.User{}, ErrNotFound
+	}
+
+	return user, err
 }
 
-func (a *Application) Insert(userBody UserBody) (User, error) {
-	if err := ValidateUser(userBody); err != nil {
-		return User{}, err
+func (a *Application) Insert(ctx context.Context, body UserBody) (pgstore.User, error) {
+	if err := ValidateUser(body); err != nil {
+		return pgstore.User{}, err
 	}
 
-	user := User{
-		Id:        uuid.New(),
-		FirstName: userBody.FirstName,
-		LastName:  userBody.LastName,
-		Biography: userBody.Biography,
-	}
-
-	a.data[user.Id] = user
-	return user, nil
+	return a.queries.Insert(ctx, pgstore.InsertParams{
+		FirstName: body.FirstName,
+		LastName:  body.LastName,
+		Biography: body.Biography,
+	})
 }
 
-func (a *Application) Update(id uuid.UUID, userBody UserBody) (User, bool, error) {
-	if _, ok := a.data[id]; !ok {
-		return User{}, false, nil
+func (a *Application) Update(ctx context.Context, id uuid.UUID, body UserBody) (pgstore.User, error) {
+	if err := ValidateUser(body); err != nil {
+		return pgstore.User{}, err
 	}
 
-	if err := ValidateUser(userBody); err != nil {
-		return User{}, true, err
+	user, err := a.queries.Update(ctx, pgstore.UpdateParams{
+		ID:        id,
+		FirstName: body.FirstName,
+		LastName:  body.LastName,
+		Biography: body.Biography,
+	})
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return pgstore.User{}, ErrNotFound
 	}
 
-	user := User{
-		Id:        id,
-		FirstName: userBody.FirstName,
-		LastName:  userBody.LastName,
-		Biography: userBody.Biography,
-	}
-
-	a.data[id] = user
-	return user, true, nil
+	return user, err
 }
 
-func (a *Application) Delete(id uuid.UUID) (User, bool) {
-	user, ok := a.data[id]
-	if !ok {
-		return User{}, false
+func (a *Application) Delete(ctx context.Context, id uuid.UUID) (pgstore.User, error) {
+	user, err := a.queries.Delete(ctx, id)
+	
+	if errors.Is(err, sql.ErrNoRows) {
+		return pgstore.User{}, ErrNotFound
 	}
-	delete(a.data, id)
-	return user, true
+
+	return user, err
 }
