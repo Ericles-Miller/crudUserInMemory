@@ -4,7 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-	"github.com/Ericles-Miller/SearchInfoIMDBsMovies/api"
+
+	"github.com/Ericles-Miller/crudUserInMemory/api"
 )
 
 func main() {
@@ -17,9 +18,7 @@ func main() {
 
 func run() error {
 
-	db := make(map[string]api.User)	
-
-	handler := api.NewHandler(db)
+	handler := api.NewHandler()
 
 	s := http.Server{
 		ReadTimeout: 5 *
