@@ -2,21 +2,19 @@ package api
 
 import (
 	"net/http"
+
 	"github.com/Ericles-Miller/crudUserInMemory/application"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
-
-func NewHandler() http.Handler {
-	app := application.New()
+func NewHandler(app *application.Application) http.Handler {
 	r := chi.NewMux()
 
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 
-	// declare endpoint here
 	r.Post("/api/users", HandleCreateUser(app))
 	r.Get("/api/users/{id}", HandleGetUser(app))
 	r.Get("/api/users", HandleGetAllUsers(app))

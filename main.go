@@ -5,10 +5,14 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-	"github.com/joho/godotenv"
-	"github.com/Ericles-Miller/crudUserInMemory/api"
-	"github.com/Ericles-Miller/crudUserInMemory/internal/database"
 
+	"github.com/joho/godotenv"
+	"github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/Ericles-Miller/crudUserInMemory/api"
+	"github.com/Ericles-Miller/crudUserInMemory/application"
+	"github.com/Ericles-Miller/crudUserInMemory/internal/database"
+	"github.com/Ericles-Miller/crudUserInMemory/internal/database/pgstore"
 )
 
 func main() {
@@ -33,7 +37,11 @@ func run() error {
 		return err
 	}
 
-	handler := api.NewHandler()
+	db := stdlib.OpenDBFromPool(pool)
+	queries := pgstore.New(db)
+	app := application.New(queries)
+
+	handler := api.NewHandler(app)
 
 	s := http.Server{
 		ReadTimeout:  5 * time.Second,
