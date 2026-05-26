@@ -1,10 +1,21 @@
-# CRUD User In Memory
+# CRUD User
 
-API RESTful em Go para gerenciar usuários com armazenamento em memória.
+API RESTful em Go para gerenciar usuários com persistência em PostgreSQL.
+
+## Tecnologias
+
+- [Go](https://golang.org/dl/) 1.21 ou superior
+- [PostgreSQL](https://www.postgresql.org/) 15
+- [pgx](https://github.com/jackc/pgx) — driver PostgreSQL
+- [sqlc](https://sqlc.dev/) — geração de queries type-safe
+- [Goose](https://github.com/pressly/goose) — migrations
+- [chi](https://github.com/go-chi/chi) — roteador HTTP
+- [Docker](https://www.docker.com/) — banco de dados local
 
 ## Requisitos
 
-- [Go](https://golang.org/dl/) 1.21 ou superior
+- Go 1.21 ou superior
+- Docker e Docker Compose
 
 ## Instalação
 
@@ -16,17 +27,43 @@ cd crudUserInMemory
 go mod tidy
 ```
 
+## Configuração
+
+Crie um arquivo `.env` na raiz do projeto com base no `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Preencha a variável:
+
+```env
+DATABASE_URL=postgres://myuser:mysecretpassword@localhost:5432/mvc_database
+```
+
 ## Executando o projeto
+
+Suba o banco de dados:
+
+```bash
+docker compose up -d
+```
+
+Execute a aplicação (as migrations rodam automaticamente no startup):
 
 ```bash
 go run main.go
 ```
 
+Ou com hot reload:
+
+```bash
+air
+```
+
 O servidor estará disponível em `http://localhost:8080`.
 
 ## Build
-
-Para gerar o binário:
 
 ```bash
 go build -o server .
@@ -66,14 +103,22 @@ go build -o server .
 ```
 .
 ├── main.go
+├── docker-compose.yml
+├── sqlc.yaml
 ├── api/
-│   ├── api.go         # rotas
-│   ├── controller.go  # handlers HTTP
-│   ├── response.go    # struct de resposta
-│   └── sendJson.go    # utilitário de resposta JSON
-└── application/
-    ├── aplication.go  # struct Application e métodos CRUD
-    ├── User.go        # struct User
-    ├── userBody.go    # struct UserBody
-    └── validateUser.go # validações
+│   ├── api.go              # rotas
+│   ├── controller.go       # handlers HTTP
+│   ├── response.go         # struct de resposta
+│   └── sendJson.go         # utilitário de resposta JSON
+├── application/
+│   ├── aplication.go       # serviço — regras de negócio e CRUD
+│   ├── userBody.go         # struct de entrada
+│   └── validateUser.go     # validações
+└── internal/
+    └── database/
+        ├── connection.go   # conexão com o banco (pgxpool)
+        ├── migrations.go   # execução automática de migrations
+        ├── migrations/     # arquivos SQL de migration (Goose)
+        ├── queries/        # queries SQL (sqlc)
+        └── pgstore/        # código gerado pelo sqlc
 ```
