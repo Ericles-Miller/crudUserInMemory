@@ -1,0 +1,29 @@
+services:
+
+  db:
+    image: postgres:15.3-alpine
+    container_name: crud-db
+    restart: on-failure
+    stop_signal: SIGINT
+    stop_grace_period: 1m
+    init: true
+    environment:
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_USER: myuser
+      POSTGRES_DB: mvc_database
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mvc_database"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+
+networks:
+  default:
