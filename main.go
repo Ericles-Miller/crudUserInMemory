@@ -29,6 +29,10 @@ func run() error {
 	}
 	defer pool.Close()
 
+	if err := database.RunMigrations(pool); err != nil {
+		return err
+	}
+
 	handler := api.NewHandler()
 
 	s := http.Server{
